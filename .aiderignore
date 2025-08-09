@@ -1,33 +1,70 @@
-# Aider ignore rules for this repo
+# ─────────────────────────────────────────────────────────────
+# Aider ignore rules for AIWF v11
+# Put this file in your repo root. Aider will avoid touching
+# anything listed here even if it's tracked by git.
+# ─────────────────────────────────────────────────────────────
 
-# VCS and metadata
+# Git internals
 .git/
 .git/*
 
-# Node / JS
-node_modules/
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Logs & temp
+*.log
+logs/
+log/
+tmp/
+temp/
+.cache/
+.cache/**
+.nyc_output/
+coverage/
+
+# Build / dist artifacts
 dist/
 build/
-coverage/
-.next/
 out/
-*.log
+.release/
+.next/
+.storybook-static/
+*.tar
+*.tar.*
+*.tgz
+*.gz
+*.zip
+
+# Node / JS
+node_modules/
+npm-cache/
+.pnpm-store/
+*.map
+# lockfiles (Aider shouldn’t edit them directly)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
 
 # Python
-__pycache__/
-*.py[cod]
-*.egg-info/
 .venv/
 venv/
-.env
-.env.*
+__pycache__/
+*.pyc
+*.pyo
+.poetry/
+poetry.lock
+
+# Virtualenv & tool metadata
+.python-version
+.mypy_cache/
+.pytype/
+pytest_cache/
 
 # Java / JVM
 target/
 .gradle/
-.classpath
-.project
-.settings/
+build.gradle.kts.lockfile
 
 # Go
 bin/
@@ -35,58 +72,109 @@ vendor/
 
 # Rust
 target/
-Cargo.lock.bk
+Cargo.lock
 
-# Frontend tools
-.cache/
-parcel-cache/
-.vite/
-.storybook/
+# Ruby
+.bundle/
+vendor/bundle/
 
-# OS cruft
-.DS_Store
-Thumbs.db
+# PHP / Composer
+vendor/
+composer.lock
 
-# Editor junk
-*.swp
-*.swo
-.idea/
-.vscode/
-*.code-workspace
+# Terraform / IaC
+.terraform/
+terraform.tfstate
+terraform.tfstate.*
+*.tfvars
+*.tfvars.json
 
-# Archives / binaries / media (keeps model focused on text code)
-*.zip
-*.tar
-*.tar.gz
-*.7z
-*.pdf
+# Docker / runtime data
+.docker/
+docker-data/
+volumes/
+data/
+*.pid
+
+# Databases & large structured data
+*.db
+*.sqlite
+*.sqlite3
+*.parquet
+*.feather
+*.arrow
+*.rdb
+*.dump
+
+# Binary & media files (Aider can’t meaningfully edit binaries)
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.webp
-*.mp4
-*.mov
-*.avi
-*.mkv
+*.ico
+*.bmp
+*.svg
+*.pdf
+*.psd
+*.ai
+*.sketch
+*.zip
+*.7z
+*.rar
+*.jar
+*.war
+*.exe
+*.dll
+*.dylib
+*.so
+*.a
+*.o
+*.wasm
+*.bin
+*.apk
+*.ipa
 *.mp3
 *.wav
 *.flac
-*.ttf
-*.otf
-*.woff
-*.woff2
-*.icns
-*.ico
+*.mp4
+*.mov
+*.mkv
+*.avi
 
-# Project-specific generated files
-coverage/
-reports/
-reports/**
-logs/
-logs/**
-tmp/
-tmp/**
+# Model files / checkpoints
+*.gguf
+*.ggml
+*.onnx
+*.safetensors
+*.pt
+*.ckpt
 
-# Aider’s own outputs (if you enable transcripts)
-# ~/.config/aider/transcripts is outside repo; keep clean here.
+# Secrets & credentials (prevent accidental edits)
+.env
+.env.*
+.envrc
+secrets/
+secrets.*
+config/secrets.*
+*.pem
+*.key
+*.crt
+id_rsa
+id_ecdsa
+id_ed25519
+*.kubeconfig
+kubeconfig
+ansible-vault.*
+vault-password.txt
+
+# IDE/editor metadata
+.vscode/
+.idea/
+*.iml
+*.sublime-*
+*.code-workspace
+
+# Project-specific caches / exports (safe to regenerate)
+exports/
+backups/
