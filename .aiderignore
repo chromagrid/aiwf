@@ -1,0 +1,92 @@
+# Aider ignore rules for this repo
+
+# VCS and metadata
+.git/
+.git/*
+
+# Node / JS
+node_modules/
+dist/
+build/
+coverage/
+.next/
+out/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+
+# Java / JVM
+target/
+.gradle/
+.classpath
+.project
+.settings/
+
+# Go
+bin/
+vendor/
+
+# Rust
+target/
+Cargo.lock.bk
+
+# Frontend tools
+.cache/
+parcel-cache/
+.vite/
+.storybook/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor junk
+*.swp
+*.swo
+.idea/
+.vscode/
+*.code-workspace
+
+# Archives / binaries / media (keeps model focused on text code)
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.mp3
+*.wav
+*.flac
+*.ttf
+*.otf
+*.woff
+*.woff2
+*.icns
+*.ico
+
+# Project-specific generated files
+coverage/
+reports/
+reports/**
+logs/
+logs/**
+tmp/
+tmp/**
+
+# Aider’s own outputs (if you enable transcripts)
+# ~/.config/aider/transcripts is outside repo; keep clean here.
