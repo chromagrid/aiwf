@@ -1,0 +1,128 @@
+{
+  "name": "AIWF • Compose (Decomposed) v11",
+  "nodes": [
+    { "id": "start", "name": "Start", "type": "n8n-nodes-base.start", "typeVersion": 1, "position": [200, 200] },
+
+    {
+      "id": "base",
+      "name": "Load Base Pattern",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const id=$json.selected_pattern_id; const p=$json.id2pattern?.[id]; if(!p){ return [{ json: { status:'invalid', error:'No matching pattern', error_details:{reason:'no_pattern'} } }]; } return [{ json: { ...$json, _wf: JSON.parse(JSON.stringify(p.workflow)) } }];"
+      },
+      "position": [420, 200]
+    },
+
+    {
+      "id": "trig_if",
+      "name": "Trigger Variant?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": { "conditions": { "conditions": [ { "leftValue": "={{ !!$json.variant_trigger }}", "rightValue": "={{ true }}", "operator": { "type": "boolean", "operation": "isTrue" } } ] } },
+      "position": [640, 160]
+    },
+    {
+      "id": "trig_apply",
+      "name": "Apply Trigger Variant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const wf=$json._wf; const vt=String($json.variant_trigger||'');\nconst i=wf.nodes.findIndex(n=>(n.type||'').startsWith('n8n-nodes-base.webhook'));\nif(i>=0){ if(vt==='cron') wf.nodes[i]={...wf.nodes[i],name:'Schedule',type:'n8n-nodes-base.cron',typeVersion:1,parameters:{triggerTimes:{item:[{mode:'everyHour'}]}}};\n  else if(vt==='gmail_label') wf.nodes[i]={...wf.nodes[i],name:'Gmail Watch',type:'n8n-nodes-base.gmailTrigger',typeVersion:1,parameters:{labelIds:'={{$json.__gmail_label || \"INBOX\"}}'}};\n  else if(vt==='rss') wf.nodes[i]={...wf.nodes[i],name:'RSS Feed',type:'n8n-nodes-base.rssFeedRead',typeVersion:1,parameters:{url:'={{$json.__rss_url}}'}}; }\nreturn [{ json: { ...$json, _wf: wf } }];"
+      },
+      "position": [860, 120]
+    },
+    { "id": "trig_passthru", "name": "No Trigger Change", "type": "n8n-nodes-base.set", "typeVersion": 3, "parameters": { "values": {} }, "position": [860, 200] },
+
+    {
+      "id": "dest_if",
+      "name": "Dest Variant?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": { "conditions": { "conditions": [ { "leftValue": "={{ !!$json.variant_dest }}", "rightValue": "={{ true }}", "operator": { "type": "boolean", "operation": "isTrue" } } ] } },
+      "position": [1080, 160]
+    },
+    {
+      "id": "dest_apply",
+      "name": "Apply Dest Variant",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const wf=$json._wf; const vd=String($json.variant_dest||'');\nconst j=wf.nodes.findIndex(n=>n.type==='n8n-nodes-base.googleSheets');\nif(j>=0){ if(vd==='slack') wf.nodes[j]={...wf.nodes[j],name:'Post to Slack',type:'n8n-nodes-base.slack',typeVersion:1,parameters:{operation:'postMessage',channel:'={{$json.__slack_channel}}',text:'={{$json.__message || \"New item\"}}'}};\n  else if(vd==='drive') wf.nodes[j]={...wf.nodes[j],name:'Save JSON to Drive',type:'n8n-nodes-base.googleDrive',typeVersion:3,parameters:{operation:'upload',fileContent:'={{JSON.stringify($json,null,2)}}',mimeType:'application/json',name:'={{\"payload-\" + $now.replace(/[:T]/g,\"-\").slice(0,19) + \".json\"}}',options:{parents:['={{$json.__drive_folder}}']}}}; }\nreturn [{ json: { ...$json, _wf: wf } }];"
+      },
+      "position": [1300, 120]
+    },
+    { "id": "dest_passthru", "name": "No Dest Change", "type": "n8n-nodes-base.set", "typeVersion": 3, "parameters": { "values": {} }, "position": [1300, 200] },
+
+    {
+      "id": "extras_if",
+      "name": "Has Extras?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": { "conditions": { "conditions": [ { "leftValue": "={{ Array.isArray($json.extras) && $json.extras.length>0 }}", "rightValue": "={{ true }}", "operator": { "type": "boolean", "operation": "isTrue" } } ] } },
+      "position": [1520, 160]
+    },
+    {
+      "id": "extras_apply",
+      "name": "Apply Extras (fanout/conds)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const wf=$json._wf; const extras=Array.isArray($json.extras)?$json.extras:[];\nconst midNode=(wf.nodes.find(n=>n.type==='n8n-nodes-base.code')||wf.nodes[1]||wf.nodes[0]); const mid=midNode?.name || wf.nodes[0].name;\nwf.connections=wf.connections||{}; wf.connections[mid]=wf.connections[mid]||{ main:[[]] };\nfunction connectFromMid(nodeName){ (wf.connections[mid].main[0] ||= []); wf.connections[mid].main[0].push({ node: nodeName, type:'main', index:0 }); }\nfor(const ex of extras){\n  if(ex?.dest==='slack'){\n    const n={ name:'Extra → Slack', type:'n8n-nodes-base.slack', typeVersion:1, parameters:{ operation:'postMessage', channel:'={{$json.__slack_channel}}', text:'={{$json.msg || \"New item\"}}' } };\n    wf.nodes.push(n); connectFromMid(n.name);\n  } else if(ex?.dest==='sheets'){\n    const n={ name:'Extra → Sheets', type:'n8n-nodes-base.googleSheets', typeVersion:4, parameters:{ operation:'append', sheetId:'={{$json.__sheet_id}}', range:'={{$json.__sheet_range || \"Sheet1\"}}', valueInputMode:'RAW' } };\n    wf.nodes.push(n); connectFromMid(n.name);\n  } else if(ex?.dest==='drive'){\n    const n={ name:'Extra → Drive', type:'n8n-nodes-base.googleDrive', typeVersion:3, parameters:{ operation:'upload', fileContent:'={{JSON.stringify($json,null,2)}}', mimeType:'application/json', name:'={{\"payload-\" + $now.replace(/[:T]/g,\"-\").slice(0,19) + \".json\"}}', options:{ parents:['={{$json.__drive_folder}}'] } } };\n    wf.nodes.push(n); connectFromMid(n.name);\n  } else if(ex?.if?.expr){\n    const ifn={ name:'Conditional', type:'n8n-nodes-base.if', typeVersion:2, parameters:{ conditions:{ conditions:[ { leftValue:`={{ ${ex.if.expr} }}`, rightValue:'={{ true }}', operator:{ type:'boolean', operation:'isTrue' } } ], options:{ typeValidation:'strict' } } } };\n    wf.nodes.push(ifn); (wf.connections[mid].main[0] ||= []); wf.connections[mid].main[0].push({ node: ifn.name, type:'main', index:0 });\n    if(ex.if.then?.dest==='slack'){\n      const tn={ name:'If → Slack', type:'n8n-nodes-base.slack', typeVersion:1, parameters:{ operation:'postMessage', channel:'={{$json.__slack_channel}}', text:'={{$json.msg||\"New item\"}}' } };\n      wf.nodes.push(tn); (wf.connections[ifn.name] ||= { main:[[],[]] }); (wf.connections[ifn.name].main[0] ||= []).push({ node: tn.name, type:'main', index:0 });\n    }\n    if(ex.if.else?.dest==='sheets'){\n      const en={ name:'If → Sheets', type:'n8n-nodes-base.googleSheets', typeVersion:4, parameters:{ operation:'append', sheetId:'={{$json.__sheet_id}}', range:'={{$json.__sheet_range||\"Sheet1\"}}', valueInputMode:'RAW' } };\n      wf.nodes.push(en); (wf.connections[ifn.name] ||= { main:[[],[]] }); (wf.connections[ifn.name].main[1] ||= []).push({ node: en.name, type:'main', index:0 });\n    }\n  }\n}\nreturn [{ json: { ...$json, _wf: wf } }];"
+      },
+      "position": [1740, 120]
+    },
+    { "id": "extras_passthru", "name": "No Extras", "type": "n8n-nodes-base.set", "typeVersion": 3, "parameters": { "values": {} }, "position": [1740, 200] },
+
+    {
+      "id": "rebuild",
+      "name": "Rebuild Base Connections",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const wf=$json._wf; const src=(wf.nodes.find(n=>/Webhook|Schedule|Gmail|RSS/.test(n.name))||wf.nodes[0]).name; const mid=(wf.nodes.find(n=>n.type==='n8n-nodes-base.code')||wf.nodes[1]||wf.nodes[0]).name; const dest=wf.nodes[wf.nodes.length-1].name; wf.connections=wf.connections||{}; wf.connections[src]={ main:[[ { node: mid, type:'main', index:0 } ]] }; wf.connections[mid]=wf.connections[mid]||{ main:[[ { node: dest, type:'main', index:0 } ]] }; return [{ json: { ...$json, workflow: wf } }];"
+      },
+      "position": [1960, 200]
+    },
+
+    { "id": "ret", "name": "Return", "type": "n8n-nodes-base.returnJson", "typeVersion": 1, "position": [2160, 200] }
+  ],
+  "connections": {
+    "Start": { "main": [[{ "node": "Load Base Pattern", "type": "main", "index": 0 }]] },
+    "Load Base Pattern": { "main": [[{ "node": "Trigger Variant?", "type": "main", "index": 0 }]] },
+    "Trigger Variant?": {
+      "main": [
+        [{ "node": "Apply Trigger Variant", "type": "main", "index": 0 }],
+        [{ "node": "No Trigger Change", "type": "main", "index": 0 }]
+      ]
+    },
+    "Apply Trigger Variant": { "main": [[{ "node": "Dest Variant?", "type": "main", "index": 0 }]] },
+    "No Trigger Change": { "main": [[{ "node": "Dest Variant?", "type": "main", "index": 0 }]] },
+
+    "Dest Variant?": {
+      "main": [
+        [{ "node": "Apply Dest Variant", "type": "main", "index": 0 }],
+        [{ "node": "No Dest Change", "type": "main", "index": 0 }]
+      ]
+    },
+    "Apply Dest Variant": { "main": [[{ "node": "Has Extras?", "type": "main", "index": 0 }]] },
+    "No Dest Change": { "main": [[{ "node": "Has Extras?", "type": "main", "index": 0 }]] },
+
+    "Has Extras?": {
+      "main": [
+        [{ "node": "Apply Extras (fanout/conds)", "type": "main", "index": 0 }],
+        [{ "node": "No Extras", "type": "main", "index": 0 }]
+      ]
+    },
+    "Apply Extras (fanout/conds)": { "main": [[{ "node": "Rebuild Base Connections", "type": "main", "index": 0 }]] },
+    "No Extras": { "main": [[{ "node": "Rebuild Base Connections", "type": "main", "index": 0 }]] },
+
+    "Rebuild Base Connections": { "main": [[{ "node": "Return", "type": "main", "index": 0 }]] }
+  },
+  "active": true
+}
