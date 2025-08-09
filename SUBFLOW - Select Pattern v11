@@ -1,0 +1,23 @@
+{
+  "name": "AIWF • Select Pattern v11",
+  "nodes": [
+    { "id": "start", "name": "Start", "type": "n8n-nodes-base.start", "typeVersion": 1, "position": [200, 240] },
+    {
+      "id": "score",
+      "name": "Tokenize + Score (+semantic)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function tok(s){ return (s||'').toLowerCase().match(/[\\p{L}\\p{N}_#]+/gu) || []; }\nconst q = $json.q || '';\nconst id2 = $json.id2pattern || {};\nconst t2 = $json.tag2ids || {};\nconst w = ($json.weights || {}).patterns || {};\nconst sem = $json.semantic_top || [];\nconst semMap = sem.reduce((m,x)=>{ m[x.id]=x.score; return m; }, {});\nconst t = tok(q);\nconst cand = new Set();\nfor (const k of t) { (t2[k]||[]).forEach(id => cand.add(id)); }\nif (cand.size === 0) Object.keys(id2).forEach(id => cand.add(id));\nlet best=null, score=-1;\nconst debugList = [];\nfor (const id of cand) {\n  const p = id2[id]; if (!p) continue;\n  let s = 0;\n  for (const tg of (p.tags||[])) {\n    const x = String(tg).toLowerCase();\n    if (t.includes(x)) s += 3; else if (q.toLowerCase().includes(x)) s += 1;\n  }\n  s *= 1 + (w[id] || 0);\n  s += (semMap[id] || 0) * 2.0;\n  debugList.push({ id, s });\n  if (s > score) { score = s; best = id; }\n}\nconst out = { ...$json, selected_pattern_id: best, rule_score: score, candidate_count: cand.size };\nif (String($json.debug||'false').toLowerCase()==='true') out.debug_candidates = debugList.sort((a,b)=>b.s-a.s).slice(0,10);\nreturn [{ json: out }];"
+      },
+      "position": [420, 240]
+    },
+    { "id": "ret", "name": "Return", "type": "n8n-nodes-base.returnJson", "typeVersion": 1, "position": [640, 240] }
+  ],
+  "connections": {
+    "Start": { "main": [[{ "node": "Tokenize + Score (+semantic)", "type": "main", "index": 0 }]] },
+    "Tokenize + Score (+semantic)": { "main": [[{ "node": "Return", "type": "main", "index": 0 }]] }
+  },
+  "active": true
+}
