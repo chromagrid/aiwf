@@ -1,0 +1,112 @@
+# ─────────────────────────────────────────────
+# AIWF v11 .gitignore – n8n + Node.js + Docker
+# ─────────────────────────────────────────────
+
+# Node modules & build artifacts
+node_modules/
+dist/
+build/
+.tmp/
+.temp/
+.cache/
+.nyc_output/
+
+# n8n local files
+.n8n/
+.local/
+workspace.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage reports
+coverage/
+*.lcov
+
+# OS-generated junk
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Env & secrets
+.env
+.env.*
+*.key
+*.pem
+*.crt
+*.csr
+*.p12
+
+# Redis dump
+dump.rdb
+*.rdb
+
+# Docker & Compose local state
+docker-compose.override.yml
+docker-data/
+volumes/
+data/
+.docker/
+
+# Editor & IDE configs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+
+# Lockfiles (optional – uncomment if you prefer)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# macOS & Linux trash
+.fseventsd
+.apdisk
+.nfs*
+
+# Git merge / patch leftovers
+*.orig
+*.rej
+
+# n8n workflow exports
+*.n8n.json
+*.workflow.json
+*.backup.json
+
+# Optional: ignore test snapshots
+__snapshots__/
+*.snap
+
+# Optional: ignore all local AIWF exports
+AIWF*.json
+aiwf-*.json
+
+# ─────────────────────────────────────────────
+# End of file
+# ─────────────────────────────────────────────
