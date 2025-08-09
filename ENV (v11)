@@ -1,0 +1,44 @@
+# Required
+OPENROUTER_API_KEY=sk-or-...
+REDIS_REST_URL=https://...upstash.io
+REDIS_REST_TOKEN=...
+
+# Defaults
+REQUIRE_API_KEY=true
+DEFAULT_SHEET_ID=1AbC...
+DEFAULT_SLACK_CHANNEL=#alerts
+DEFAULT_DRIVE_FOLDER=1FOLDERID
+REFERRER_URL=https://your-app.example
+
+# RL
+RL_MAX=60
+RL_WINDOW_MS=60000
+
+# Embeddings
+EMBED_MODEL=openai/text-embedding-3-small
+EMBED_CATALOG_CAP=50
+EMBED_BUDGET_MAX=32
+
+# n8n sandbox run (optional)
+N8N_API_URL=https://your-n8n/api/v1
+N8N_API_KEY=n8n_api_...
+
+# Subflow IDs
+SUB_AUTH_RATE_ID=...
+SUB_EMBED_ID=...        # optional if semantic_enabled=false
+SUB_SELECT_ID=...
+SUB_COMPOSE_ID=...
+SUB_FINALIZE_ID=...
+
+# Logging
+EVENTS_SHEET_ID=1XyZ...
+
+# CORS
+CORS_ALLOW_ORIGIN=*
+
+# Idempotency & response clamp
+IDEMP_TTL_S=900
+RESPONSE_MAX_KB=128
+
+# Degraded mode (force)
+DEGRADED=false
