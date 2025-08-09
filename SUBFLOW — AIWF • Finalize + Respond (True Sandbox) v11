@@ -1,0 +1,131 @@
+{
+  "name": "AIWF • Finalize + Respond (True Sandbox) v11",
+  "nodes": [
+    { "id": "start", "name": "Start", "type": "n8n-nodes-base.start", "typeVersion": 1, "position": [200, 240] },
+
+    {
+      "id": "final",
+      "name": "Finalize (IDs + Layout + Topology)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function fnv1a32(str){ let h=0x811c9dc5>>>0; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=(h + ((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24)))>>>0; } return h>>>0; }\nfunction det(seed,i){ const n=fnv1a32(`${seed}:${i}`).toString(16).padStart(8,'0'); return `n_${n}`; }\nconst it=$json; let wf=it.workflow||{};\nif(!Array.isArray(wf.nodes)||wf.nodes.length===0){ return [{ json:{ status:'invalid', error:'No workflow composed', error_details:{reason:'empty_nodes'} } }]; }\nconst maxAllowed = Number(it.max_nodes_allowed||0); if(maxAllowed>0 && wf.nodes.length>maxAllowed){ return [{ json:{ status:'invalid', error:'node_count_exceeds_limit', error_details:{ maxAllowed, actual:wf.nodes.length } } }]; }\nconst seed=(wf.name||'Workflow')+':' + (it.selected_pattern_id||'x');\nwf.nodes=wf.nodes.map((n,i)=>({ ...n, id: det(seed,i) }));\nconst names=new Set(wf.nodes.map(n=>n.name));\nfor(const [src,edges] of Object.entries(wf.connections||{})){\n  for(const arr of (edges.main||[])){\n    for(const c of (arr||[])){\n      if(!names.has(c.node)){\n        return [{ json: { status:'invalid', error:`Unknown connection target: ${c.node}`, error_details:{reason:'bad_connection', node:c.node} } }];\n      }\n    }\n  }\n}\nwf.nodes.forEach((n,i)=>{ if(!Array.isArray(n.position)||n.position.length!==2){ const col=i%4,row=Math.floor(i/4); n.position=[200+(col*240),120+(row*160)]; } });\nconst now=new Date().toISOString();\nconst slug=(wf.name||'generated-workflow').toLowerCase().replace(/[^a-z0-9]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,40);\nconst ts=now.slice(0,19).replace(/[T:]/g,'-');\nconst filename=`${slug}-${ts}.json`;\nconst fileContent=JSON.stringify(wf,null,2);\nconst bytes=Buffer.byteLength(fileContent,'utf8');\nconst parents=(it.__drive_folder||'').trim()? [it.__drive_folder.trim()] : [];\nconst preview=(String(it.preview||'false').toLowerCase()==='true');\nconst slim=(String(it.slim||'true').toLowerCase()==='true');\nreturn [{ json:{ ...it, status: preview?'preview':'ready', workflow:wf, filename, fileContent, node_count:wf.nodes.length, file_size_kb: Math.round(bytes/10.24)/100, drive_parents: parents, preview, slim } }];"
+      },
+      "position": [420, 240]
+    },
+
+    {
+      "id": "test_if",
+      "name": "Test? (API Run)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": { "conditions": { "conditions": [ { "leftValue": "={{ $json.preview !== true && String($json.test||'false').toLowerCase()==='true' && !!$env.N8N_API_URL && !!$env.N8N_API_KEY }}", "rightValue": "={{ true }}", "operator": { "type": "boolean", "operation": "isTrue" } } ] } },
+      "position": [640, 240]
+    },
+
+    {
+      "id": "api_run",
+      "name": "n8n /workflows/run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "parameters": {
+        "url": "={{ $env.N8N_API_URL + '/workflows/run' }}",
+        "method": "POST",
+        "jsonParameters": true,
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "Authorization", "value": "={{ 'Bearer ' + $env.N8N_API_KEY }}" }, { "name": "Content-Type", "value": "application/json" } ] },
+        "sendBody": true,
+        "bodyParameters": { "parameters": [ { "name": "workflowData", "value": "={{ $json.workflow }}" }, { "name": "runData", "value": "{}" } ] },
+        "options": { "bodyContentType": "json", "timeout": 25000, "retryOnFail": true, "maxRetries": 1 }
+      },
+      "position": [860, 200],
+      "continueOnFail": true
+    },
+
+    {
+      "id": "test_merge",
+      "name": "Set Test Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const base=$items('Finalize (IDs + Layout + Topology)',0,0)[0].json;\ntry {\n  const ok = ($json.finished===true) || ($json.data && $json.data.finished===true);\n  if(!ok){ return [{ json:{ ...base, status:'test_failed', error:'Sandbox API run failed', error_details:{ ...(base.error_details||{}), test:'failed' } } }]; }\n  return [{ json:{ ...base, status:'tested_ok' } }];\n} catch(e){ return [{ json:{ ...base, status:'test_failed', error:e.message } }]; }"
+      },
+      "position": [1080, 200]
+    },
+
+    {
+      "id": "prev_if",
+      "name": "Preview?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": { "conditions": { "conditions": [ { "leftValue": "={{ $json.preview }}", "rightValue": "={{ true }}", "operator": { "type": "boolean", "operation": "isTrue" } } ] } },
+      "position": [640, 320]
+    },
+
+    {
+      "id": "drive",
+      "name": "Save to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "parameters": {
+        "operation": "upload",
+        "fileContent": "={{ $json.fileContent }}",
+        "mimeType": "application/json",
+        "name": "={{ $json.filename }}",
+        "options": { "parents": "={{ $json.drive_parents }}" }
+      },
+      "position": [860, 320],
+      "continueOnFail": true
+    },
+
+    {
+      "id": "drive_status",
+      "name": "Drive Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const ok=!!($json.id && ($json.webViewLink||$json.webContentLink));\nif(!ok){ const base=$items('Finalize (IDs + Layout + Topology)',0,0)[0].json; return [{ json:{ ...base, status:(base.status==='tested_ok'?'drive_failed':base.status), error:'Drive upload failed' } }]; }\nconst base=($items('Set Test Status',0,0)[0]||$items('Finalize (IDs + Layout + Topology)',0,0)[0]).json;\nreturn [{ json:{ ...base, drive_file_id:$json.id, drive_link:$json.webViewLink||$json.webContentLink } }];"
+      },
+      "position": [1080, 320]
+    },
+
+    {
+      "id": "response",
+      "name": "Build Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const slim = String($json.slim||'true').toLowerCase()==='true';\nconst debug = String($json.debug||'false').toLowerCase()==='true';\nconst body = {\n  status: $json.status||'ready',\n  pattern_id: $json.selected_pattern_id||null,\n  used_llm: !!$json.used_llm,\n  rule_score: $json.rule_score,\n  candidate_count: $json.candidate_count,\n  error: $json.error||null,\n  error_details: $json.error_details||null,\n  node_count: $json.node_count,\n  filename: $json.filename,\n  drive_link: $json.drive_link||null,\n  tested: ($json.status==='tested_ok'),\n  meta: $json.meta || null\n};\nif (!slim) body.workflow = $json.workflow;\nif (debug) { body.debug = { candidates: $json.debug_candidates||null }; }\nreturn [{ json: body }];"
+      },
+      "position": [1280, 260]
+    },
+
+    { "id": "ret", "name": "Return", "type": "n8n-nodes-base.returnJson", "typeVersion": 1, "position": [1480, 260] }
+  ],
+  "connections": {
+    "Start": { "main": [[{ "node": "Finalize (IDs + Layout + Topology)", "type": "main", "index": 0 }]] },
+    "Finalize (IDs + Layout + Topology)": { "main": [[{ "node": "Test? (API Run)", "type": "main", "index": 0 }]] },
+    "Test? (API Run)": {
+      "main": [
+        [{ "node": "n8n /workflows/run", "type": "main", "index": 0 }],
+        [{ "node": "Preview?", "type": "main", "index": 0 }]
+      ]
+    },
+    "n8n /workflows/run": { "main": [[{ "node": "Set Test Status", "type": "main", "index": 0 }]] },
+    "Set Test Status": { "main": [[{ "node": "Preview?", "type": "main", "index": 0 }]] },
+    "Preview?": {
+      "main": [
+        [{ "node": "Build Response", "type": "main", "index": 0 }],
+        [{ "node": "Save to Drive", "type": "main", "index": 0 }]
+      ]
+    },
+    "Save to Drive": { "main": [[{ "node": "Drive Status", "type": "main", "index": 0 }]] },
+    "Drive Status": { "main": [[{ "node": "Build Response", "type": "main", "index": 0 }]] },
+    "Build Response": { "main": [[{ "node": "Return", "type": "main", "index": 0 }]] }
+  },
+  "active": true
+}
