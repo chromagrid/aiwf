@@ -1,0 +1,44 @@
+{
+  "name": "AIWF • Catalog Loader (Redis) v11",
+  "nodes": [
+    { "id":"cron","name":"Every 5 min","type":"n8n-nodes-base.cron","typeVersion":1,"parameters":{"triggerTimes":{"item":[{"mode":"everyX","value":5,"unit":"minutes"}]}},"position":[200,160]},
+    {
+      "id":"src",
+      "name":"Build Catalog (inline demo)",
+      "type":"n8n-nodes-base.code",
+      "typeVersion":2,
+      "parameters":{
+        "mode":"runOnceForAllItems",
+        "jsCode":"// Replace with Drive fetch if desired\nconst patterns=[\n  {id:'webhook_to_sheets', tags:['sheets','sheet','append','row'], description:'Webhook → flatten JSON → append to Google Sheets.', workflow:{name:'Webhook → Google Sheets',nodes:[{name:'Webhook',type:'n8n-nodes-base.webhook',typeVersion:1,parameters:{httpMethod:'POST',path:'in',responseMode:'lastNode'}},{name:'JSON → Row',type:'n8n-nodes-base.code',typeVersion:2,parameters:{mode:'runOnceForAllItems',jsCode:\"const out=[];for(const it of $input.all()){const j=it.json;out.push({json:Object.fromEntries(Object.entries(j).map(([k,v])=>[k,typeof v==='object'?JSON.stringify(v):v]))});}return out;\"}},{name:'Sheets Append',type:'n8n-nodes-base.googleSheets',typeVersion:4,parameters:{operation:'append',sheetId:'={{$json.__sheet_id}}',range:'={{$json.__sheet_range||\\'Sheet1\\'}}',valueInputMode:'RAW'}}],connections:{}}},\n  {id:'webhook_to_drive', tags:['drive','upload','json'], description:'Webhook → save payload JSON to Drive.', workflow:{name:'Webhook → Drive JSON',nodes:[{name:'Webhook',type:'n8n-nodes-base.webhook',typeVersion:1,parameters:{httpMethod:'POST',path:'in',responseMode:'lastNode'}},{name:'Prep File',type:'n8n-nodes-base.code',typeVersion:2,parameters:{mode:'runOnceForAllItems',jsCode:'return $input.all().map(i=>({json:{__file_content:JSON.stringify(i.json,null,2),__file_name:`+\"`\"+`payload-${new Date().toISOString().slice(0,19).replace(/[T:]/g,'-')}.json`+\"`\"+`}}));'}},{name:'Drive Upload',type:'n8n-nodes-base.googleDrive',typeVersion:3,parameters:{operation:'upload',fileContent:'={{$json.__file_content}}',mimeType:'application/json',name:'={{$json.__file_name}}',options:{parents:['={{$json.__drive_folder}}']}}}],connections:{}}},\n  {id:'webhook_to_slack', tags:['slack','message','notify'], description:'Webhook → Slack post.', workflow:{name:'Webhook → Slack',nodes:[{name:'Webhook',type:'n8n-nodes-base.webhook',typeVersion:1,parameters:{httpMethod:'POST',path:'in',responseMode:'lastNode'}},{name:'Format',type:'n8n-nodes-base.code',typeVersion:2,parameters:{mode:'runOnceForAllItems',jsCode:'return $input.all().map(i=>({json:{channel:$json.__slack_channel||\\'#alerts\\',text:`+\"`\"+`New event: ${i.json.title||\\'payload\\'}`+\"`\"+`}}));'}},{name:'Slack',type:'n8n-nodes-base.slack',typeVersion:1,parameters:{operation:'postMessage',channel:'={{$json.channel}}',text:'={{$json.text}}'}}],connections:{}}}\n];\nconst id2pattern=Object.fromEntries(patterns.map(p=>[p.id,p]));\nconst tag2ids={};\nfor(const p of patterns){ for(const t of (p.tags||[])){ const k=String(t).toLowerCase(); (tag2ids[k] ||= []).push(p.id); } }\nconst weights={ patterns:{}, updatedAt:new Date().toISOString() };\nreturn [{ json:{ id2pattern, tag2ids, weights } }];"
+      },
+      "position":[420,160]
+    },
+    {
+      "id":"redis_set",
+      "name":"Redis SET catalog (pipeline)",
+      "type":"n8n-nodes-base.httpRequest",
+      "typeVersion":4,
+      "parameters":{
+        "url":"={{ $env.REDIS_REST_URL && ($env.REDIS_REST_URL + '/pipeline') }}",
+        "method":"POST",
+        "jsonParameters":true,
+        "sendHeaders":true,
+        "headerParameters":{"parameters":[{"name":"Authorization","value":"={{ 'Bearer ' + $env.REDIS_REST_TOKEN }}"}]},
+        "sendBody":true,
+        "bodyParameters":{
+          "parameters":[
+            { "name":"pipeline","value":"={{ (function(){ const b=$json; return [ ['SET','aiwf:catalog:id2pattern', JSON.stringify(b.id2pattern)], ['SET','aiwf:catalog:tag2ids', JSON.stringify(b.tag2ids)], ['SET','aiwf:weights', JSON.stringify(b.weights)], ['EXPIRE','aiwf:catalog:id2pattern', 86400], ['EXPIRE','aiwf:catalog:tag2ids', 86400], ['EXPIRE','aiwf:weights', 86400] ]; })() }}"}
+          ]
+        }
+      },
+      "position":[640,160],
+      "continueOnFail":true
+    }
+  ],
+  "connections":{
+    "Every 5 min":{"main":[[{"node":"Build Catalog (inline demo)","type":"main","index":0}]]},
+    "Build Catalog (inline demo)":{"main":[[{"node":"Redis SET catalog (pipeline)","type":"main","index":0}]]}
+  },
+  "active": false,
+  "settings": { "saveManualExecutions": true }
+}
