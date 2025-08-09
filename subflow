@@ -1,0 +1,86 @@
+{
+  "name": "AIWF • Auth + Rate Limit (Fail-Fast) v11",
+  "nodes": [
+    { "id": "start", "name": "Start", "type": "n8n-nodes-base.start", "typeVersion": 1, "position": [200, 240] },
+
+    {
+      "id": "auth",
+      "name": "Auth",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const requireKey=String($json.require_api_key||$env.REQUIRE_API_KEY||'true').toLowerCase()==='true';\nconst hdr=$json.headers?.authorization||$json.headers?.Authorization||'';\nlet api=''; if(/^Bearer\\s+/.test(hdr)) api=hdr.replace(/^Bearer\\s+/,'').trim(); if(!api) api=$json.api_key||'';\nif(requireKey && !api) return [{ json: { status:'unauthorized' } }];\nif(api && !/^[A-Za-z0-9-_]{16,72}$/.test(api)) return [{ json: { status:'unauthorized' } }];\nreturn [{ json: { ...$json, user_id: api||'public', auth_ok:true } }];"
+      },
+      "position": [420, 240]
+    },
+
+    {
+      "id": "gate401",
+      "name": "Unauthorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "parameters": { "conditions": { "conditions": [ { "leftValue": "={{ $json.status }}", "rightValue": "unauthorized", "operator": { "type": "string", "operation": "equals" } } ] } },
+      "position": [620, 240]
+    },
+
+    {
+      "id": "rl_plan",
+      "name": "RL Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": { "mode": "runOnceForAllItems",
+        "jsCode": "const path = String($json.path || '/aiwf/v11');\nconst hdrs = $json.headers || {};\nconst ip = String(hdrs['x-forwarded-for'] || hdrs['X-Forwarded-For'] || hdrs['cf-connecting-ip'] || hdrs['x-real-ip'] || '').split(',')[0].trim() || 'unknown';\nconst keyUser = `aiwf:rl:${$json.user_id||'public'}:${path}`;\nconst keyIP   = `aiwf:rl:ip:${ip}:${path}`;\nconst windowMs=Number($json.__rl_window_ms_override ?? $env.RL_WINDOW_MS ?? 60000);\nconst limit   = Number($json.__rl_max_override ?? $env.RL_MAX ?? 60);\nconst now=Date.now();\nreturn [{ json: { ...$json, rl: { keyUser, keyIP, windowMs, limit, now } } }];"
+      },
+      "position": [820, 240]
+    },
+
+    {
+      "id": "rl_pipe",
+      "name": "Redis Pipeline RL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "parameters": {
+        "url": "={{ $env.REDIS_REST_URL && ($env.REDIS_REST_URL + '/pipeline') }}",
+        "method": "POST",
+        "jsonParameters": true,
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [ { "name": "Authorization", "value": "={{ 'Bearer ' + $env.REDIS_REST_TOKEN }}" } ] },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "pipeline",
+              "value": "={{ (function(){ const r=$json.rl; return [ ['ZREMRANGEBYSCORE',r.keyUser,0, r.now-r.windowMs], ['ZREMRANGEBYSCORE',r.keyIP,0, r.now-r.windowMs], ['ZADD',r.keyUser, r.now, String(r.now)], ['ZADD',r.keyIP, r.now, String(r.now)], ['ZCARD',r.keyUser], ['ZCARD',r.keyIP], ['PEXPIRE',r.keyUser, r.windowMs], ['PEXPIRE',r.keyIP, r.windowMs] ]; })() }}"
+            }
+          ]
+        }
+      },
+      "position": [1040, 240],
+      "continueOnFail": true
+    },
+
+    {
+      "id": "rl_eval",
+      "name": "RL Decide (Fail-Fast)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "try{\n  const res=$json.results||$json.result||$json.data; if(!Array.isArray(res)) return [{ json:{ status:'rl_unavailable' } }];\n  const zUser = (res?.[4]?.result ?? res?.[4]) || 0; const zIP = (res?.[5]?.result ?? res?.[5]) || 0;\n  const base=$items('RL Plan',0,0)[0].json; const limit=Number(base.rl.limit||60);\n  const over = Math.max(zUser, zIP) > limit; const remaining = Math.max(0, limit - Math.max(zUser, zIP)); const reset_s = Math.ceil((base.rl.now + base.rl.windowMs)/1000);\n  if(over){ return [{ json:{ status:'rate_limited', retry_after_ms: base.rl.windowMs, rate_limit:{ limit, remaining:0, reset_s } } }]; }\n  return [{ json:{ ...base, rl_ok:true, rate_limit:{ limit, remaining, reset_s } } }];\n} catch(e){ return [{ json: { status:'rl_unavailable' } }]; }"
+      },
+      "position": [1260, 240]
+    },
+
+    { "id": "ret", "name": "Return", "type": "n8n-nodes-base.returnJson", "typeVersion": 1, "position": [1460, 240] }
+  ],
+  "connections": {
+    "Start": { "main": [[{ "node": "Auth", "type": "main", "index": 0 }]] },
+    "Auth": { "main": [[{ "node": "Unauthorized?", "type": "main", "index": 0 }]] },
+    "Unauthorized?": { "main": [ [], [{ "node": "RL Plan", "type": "main", "index": 0 }] ] },
+    "RL Plan": { "main": [[{ "node": "Redis Pipeline RL", "type": "main", "index": 0 }]] },
+    "Redis Pipeline RL": { "main": [[{ "node": "RL Decide (Fail-Fast)", "type": "main", "index": 0 }]] },
+    "RL Decide (Fail-Fast)": { "main": [[{ "node": "Return", "type": "main", "index": 0 }]] }
+  },
+  "active": true
+}
